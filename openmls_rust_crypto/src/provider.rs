@@ -7,7 +7,7 @@ use aes_gcm::{
 use chacha20poly1305::ChaCha20Poly1305;
 // See https://github.com/rust-analyzer/rust-analyzer/issues/7243
 // for the rust-analyzer issue with the following line.
-use ed25519_dalek::Signer as DalekSigner;
+use ed25519_dalek::{Signer as DalekSigner, SigningKey as DalekSigningKey};
 use hkdf::Hkdf;
 use hpke::Hpke;
 use hpke_rs_crypto::types as hpke_types;
@@ -236,7 +236,7 @@ impl OpenMlsCrypto for RustCrypto {
             }
             SignatureScheme::ED25519 => {
                 // XXX: We can't use our RNG here
-                let k = ed25519_dalek::Keypair::generate(&mut rand_07::rngs::OsRng).to_bytes();
+                let k = DalekSigningKey::generate(&mut rand::rngs::OsRng).to_bytes();
                 let pk = k[ed25519_dalek::SECRET_KEY_LENGTH..].to_vec();
                 // full key here because we need it to sign...
                 let sk_pk = k.into();
@@ -266,13 +266,16 @@ impl OpenMlsCrypto for RustCrypto {
                 .map_err(|_| CryptoError::InvalidSignature)
             }
             SignatureScheme::ED25519 => {
-                let k = ed25519_dalek::PublicKey::from_bytes(pk)
-                    .map_err(|_| CryptoError::CryptoLibraryError)?;
+                let k = ed25519_dalek::VerifyingKey::from_bytes(
+                    pk.try_into().map_err(|_| CryptoError::CryptoLibraryError)?
+                ).map_err(|_| CryptoError::CryptoLibraryError)?;
+
                 if signature.len() != ed25519_dalek::SIGNATURE_LENGTH {
                     return Err(CryptoError::CryptoLibraryError);
                 }
                 let mut sig = [0u8; ed25519_dalek::SIGNATURE_LENGTH];
                 sig.clone_from_slice(signature);
+
                 k.verify_strict(data, &ed25519_dalek::Signature::from(sig))
                     .map_err(|_| CryptoError::InvalidSignature)
             }
@@ -294,8 +297,8 @@ impl OpenMlsCrypto for RustCrypto {
                 Ok(signature.to_der().to_bytes().into())
             }
             SignatureScheme::ED25519 => {
-                let k = ed25519_dalek::Keypair::from_bytes(key)
-                    .map_err(|_| CryptoError::CryptoLibraryError)?;
+                let k = DalekSigningKey::from_bytes(key.clone().try_into().map_err(|_| CryptoError::CryptoLibraryError)?);
+
                 let signature = k.sign(data);
                 Ok(signature.to_bytes().into())
             }
