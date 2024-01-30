@@ -4,6 +4,9 @@ version = "0.1.0"
 authors = ["OpenMLS Authors"]
 edition = "2021"
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
 url = "2.2"
 reqwest = { version = "0.11", features = ["blocking", "json"] }
@@ -19,7 +22,17 @@ openmls_rust_crypto = { path = "../openmls_rust_crypto" }
 openmls_memory_keystore = { path = "../memory_keystore" }
 openmls_basic_credential = { path = "../basic_credential" }
 
-[dependencies.termion]
-version = "1.5"
-git = "https://gitlab.redox-os.org/Jezza/termion.git"
-branch = "windows-support"
+js-sys = "0.3.67"
+
+wasm-bindgen = "0.2.90"
+wasm-bindgen-futures = "0.4.40"
+
+[dependencies.web-sys]
+version = "0.3.67"
+features = [
+  "Window",
+  "Request",
+  "RequestInit",
+  "RequestMode",
+  "Response"
+]
