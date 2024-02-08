@@ -27,6 +27,7 @@ openmls_rust_crypto = { version = "0.2.0", path = "../openmls_rust_crypto", opti
 openmls_basic_credential = { version = "0.2.0", path = "../basic_credential", optional = true, features = ["clonable", "test-utils"] }
 rstest = { version = "^0.16", optional = true }
 rstest_reuse = { version = "0.4", optional = true }
+instant = { version = "0.1.12", features = [ "wasm-bindgen" ] }
 
 [features]
 default = []
