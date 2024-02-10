@@ -7,31 +7,40 @@ use openmls::prelude::*;
 use openmls_rust_crypto::OpenMlsRustCrypto;
 use openmls_traits::OpenMlsCryptoProvider;
 use tls_codec::TlsByteVecU8;
+use serde::{Serialize, Deserialize};
+
+use wasm_bindgen::prelude::*;
 
 use super::{backend::Backend, conversation::Conversation, identity::Identity};
 
 const CIPHERSUITE: Ciphersuite = Ciphersuite::MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519;
 
+#[derive(Serialize,Deserialize)]
 pub struct Contact {
     username: String,
     id: Vec<u8>,
     // We store multiple here but always only use the first one right now.
     #[allow(dead_code)]
+    #[serde(skip)]
     public_keys: ClientKeyPackages,
 }
 
+#[derive(Serialize,Deserialize)]
 pub struct Group {
     group_name: String,
     conversation: Conversation,
     mls_group: RefCell<MlsGroup>,
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct User {
     pub(crate) username: String,
     pub(crate) contacts: HashMap<Vec<u8>, Contact>,
     pub(crate) groups: RefCell<HashMap<Vec<u8>, Group>>,
     pub(crate) identity: RefCell<Identity>,
+    #[serde(skip)]
     backend: Backend,
+    #[serde(skip)]
     crypto: OpenMlsRustCrypto,
 }
 
@@ -95,8 +104,8 @@ impl User {
         Vec::from_iter(kpgs.into_iter())
     }
 
-    pub fn register(&self) {
-        match self.backend.register_client(self) {
+    pub async fn register(&self) {
+        match self.backend.register_client(self).await {
             Ok(r) => log::debug!("Created new user: {:?}", r),
             Err(e) => log::error!("Error creating user: {:?}", e),
         }
@@ -146,7 +155,7 @@ impl User {
     }
 
     /// Create a new key package and publish it to the delivery server
-    pub fn create_kp(&self) {
+    pub async fn create_kp(&self) {
         let kp = self.add_key_package();
         let ckp = ClientKeyPackages(
             vec![kp]
@@ -156,14 +165,14 @@ impl User {
                 .into(),
         );
 
-        match self.backend.publish_key_packages(self, &ckp) {
+        match self.backend.publish_key_packages(self, &ckp).await {
             Ok(()) => (),
             Err(e) => println!("Error sending new key package: {e:?}"),
         };
     }
 
     /// Send an application message to the group.
-    pub fn send_msg(&self, msg: &str, group: String) -> Result<(), String> {
+    pub async fn send_msg(&self, msg: &str, group: String) -> Result<(), String> {
         let groups = self.groups.borrow();
         let group = match groups.get(group.as_bytes()) {
             Some(g) => g,
@@ -178,7 +187,7 @@ impl User {
 
         let msg = GroupMessage::new(message_out.into(), &self.recipients(group));
         log::debug!(" >>> send: {:?}", msg);
-        match self.backend.send_msg(&msg) {
+        match self.backend.send_msg(&msg).await {
             Ok(()) => (),
             Err(e) => println!("Error sending group message: {e:?}"),
         }
@@ -192,7 +201,7 @@ impl User {
     /// Update the user. This involves:
     /// * retrieving all new messages from the server
     /// * update the contacts with all other clients known to the server
-    pub fn update(&mut self, group_name: Option<String>) -> Result<Vec<String>, String> {
+    pub async fn update(&mut self, group_name: Option<String>) -> Result<Vec<String>, String> {
         log::debug!("Updating {} ...", self.username);
 
         let mut messages_out = Vec::new();
@@ -265,7 +274,7 @@ impl User {
 
         log::debug!("update::Processing messages for {} ", self.username);
         // Go through the list of messages and process or store them.
-        for message in self.backend.recv_msgs(self)?.drain(..) {
+        for message in self.backend.recv_msgs(self).await?.drain(..) {
             log::debug!("Reading message format {:#?} ...", message.wire_format());
             match message.extract() {
                 MlsMessageInBody::Welcome(welcome) => {
@@ -303,7 +312,7 @@ impl User {
         }
         log::debug!("update::Processing messages done");
 
-        for c in self.backend.list_clients()?.drain(..) {
+        for c in self.backend.list_clients().await?.drain(..) {
             let client_id = c.id.clone();
             log::debug!(
                 "update::Processing client for contact {:?}",
@@ -379,7 +388,7 @@ impl User {
     }
 
     /// Invite user with the given name to the group.
-    pub fn invite(&mut self, name: String, group: String) -> Result<(), String> {
+    pub async fn invite(&mut self, name: String, group: String) -> Result<(), String> {
         // First we need to get the key package for {id} from the DS.
         let contact = match self.contacts.values().find(|c| c.username == name) {
             Some(v) => v,
@@ -387,7 +396,7 @@ impl User {
         };
 
         // Reclaim a key package from the server
-        let joiner_key_package = self.backend.consume_key_package(&contact.id).unwrap();
+        let joiner_key_package = self.backend.consume_key_package(&contact.id).await.unwrap();
 
         // Build a proposal with this key package and do the MLS bits.
         let group_id = group.as_bytes();
@@ -415,7 +424,7 @@ impl User {
         let group_recipients = self.recipients(group);
 
         let msg = GroupMessage::new(out_messages.into(), &group_recipients);
-        self.backend.send_msg(&msg)?;
+        self.backend.send_msg(&msg).await?;
 
         // Second, process the invitation on our end.
         group
@@ -427,14 +436,14 @@ impl User {
         // Finally, send Welcome to the joiner.
         log::trace!("Sending welcome");
         self.backend
-            .send_welcome(&welcome)
+            .send_welcome(&welcome).await
             .expect("Error sending Welcome message");
 
         Ok(())
     }
 
     /// Remove user with the given name from the group.
-    pub fn remove(&mut self, name: String, group: String) -> Result<(), String> {
+    pub async fn remove(&mut self, name: String, group: String) -> Result<(), String> {
         // Get the group ID
         let group_id = group.as_bytes();
         let mut groups = self.groups.borrow_mut();
@@ -463,7 +472,7 @@ impl User {
         let group_recipients = self.recipients(group);
 
         let msg = GroupMessage::new(remove_message.into(), &group_recipients);
-        self.backend.send_msg(&msg)?;
+        self.backend.send_msg(&msg).await?;
 
         // Second, process the removal on our end.
         group

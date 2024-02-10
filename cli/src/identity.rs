@@ -1,10 +1,12 @@
 use std::collections::HashMap;
+use serde::{Serialize, Deserialize};
 
 use openmls::prelude::{config::CryptoConfig, *};
 use openmls_basic_credential::SignatureKeyPair;
 use openmls_rust_crypto::OpenMlsRustCrypto;
 use openmls_traits::OpenMlsCryptoProvider;
 
+#[derive(Serialize, Deserialize)]
 pub struct Identity {
     pub(crate) kp: HashMap<Vec<u8>, KeyPackage>,
     pub(crate) credential_with_key: CredentialWithKey,
