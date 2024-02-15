@@ -1,3 +1,9 @@
+use backend::Backend;
+use ds_lib::ClientKeyPackages;
+use openmls::{key_packages::KeyPackageIn, prelude_test::KeyPackage};
+use openmls_rust_crypto::OpenMlsRustCrypto;
+use openmls_traits::OpenMlsCryptoProvider;
+use tls_codec::TlsByteVecU8;
 use wasm_bindgen::prelude::*;
 
 use web_sys::console;
@@ -20,26 +26,55 @@ pub fn start() {
     panic::set_hook(Box::new(console_error_panic_hook::hook));
 }
 
+
 #[wasm_bindgen]
-pub async fn register(client_name: String) -> JsValue {
-    let mut client  = Some(user::User::new(client_name.clone()));
-
-    client.as_mut().unwrap().add_key_package();
-    client.as_mut().unwrap().add_key_package();
-    client.as_ref().unwrap().register().await;
-    console::log_1(&format!("registered new client {}\n\n", client_name.clone()).into());
-
-    return serde_wasm_bindgen::to_value(&client).unwrap();
+pub fn create_client(client_name: String) -> JsValue {
+    let client = Some(user::User::new(client_name.clone()));
+    serde_wasm_bindgen::to_value(&client).unwrap()
 }
 
 #[wasm_bindgen]
-pub async fn create_kp(client_value: JsValue) -> JsValue {
+pub async fn register(client_value: JsValue) {
     let client = deserialize_client(client_value).unwrap();
-    client.create_kp().await;
+    client.register().await;
+}
 
-    console::log_1(&format!(" >>> New key package created\n\n").into());
+#[wasm_bindgen]
+pub fn create_kp(client_value: JsValue) -> JsValue {
+    let client = deserialize_client(client_value).unwrap();
+    let key_package = client.create_key_package();
+    serde_wasm_bindgen::to_value(&key_package).unwrap()
+}
 
-    return serde_wasm_bindgen::to_value(&client).unwrap();
+#[wasm_bindgen]
+pub async fn broadcast_kp(client_value: JsValue, kp_hash: Vec<u8>, kp_value: JsValue) {
+    let client = deserialize_client(client_value).unwrap();
+    let kp_data: KeyPackage = serde_wasm_bindgen::from_value(kp_value).unwrap();
+
+    let kp = (kp_hash, kp_data);
+    let ckp = ClientKeyPackages(
+        vec![kp]
+            .into_iter()
+            .map(|(b, kp)| (b.into(), KeyPackageIn::from(kp)))
+            .collect::<Vec<(TlsByteVecU8, KeyPackageIn)>>()
+            .into(),
+    );
+
+    match (Backend::default()).publish_key_packages(&client, &ckp).await {
+        Ok(()) => (),
+        Err(e) => println!("Error sending new key package: {e:?}"),
+    };
+}
+
+#[wasm_bindgen]
+pub fn hash_kp(key_package_value: JsValue) -> JsValue {
+    let key_package: KeyPackage = serde_wasm_bindgen::from_value(key_package_value).unwrap();
+    let hash = key_package
+        .hash_ref((OpenMlsRustCrypto::default()).crypto())
+        .unwrap()
+        .as_slice()
+        .to_vec();
+    serde_wasm_bindgen::to_value(&hash).unwrap()
 }
 
 #[wasm_bindgen]
@@ -78,16 +113,21 @@ pub async fn read_msgs(client_value: JsValue, group_name: String) -> JsValue {
 
 
 #[wasm_bindgen]
-pub async fn update(client_value: JsValue, group_id: Option<String>) {
+pub async fn update(client_value: JsValue, group_id: Option<String>) -> JsValue {
     let mut client: user::User = match serde_wasm_bindgen::from_value(client_value) {
         Ok(c) => c,
         Err(e) => {
-            console::log_1(&format!(" >>> Error updating client: {e}\n").into());
-            return;
+            panic!(" >>> Error updating client: {e}\n");
         }
     };
 
-    let messages = client.update(group_id).await.unwrap();
+    let messages = match client.update(group_id).await {
+        Ok(c) => c,
+        Err(e) => {
+            panic!(" >>> No updates: {e}\n");
+        }
+    };
+
     console::log_1(&format!(" >>> Updated client :)\n").into());
 
     if !messages.is_empty() {
@@ -98,6 +138,7 @@ pub async fn update(client_value: JsValue, group_id: Option<String>) {
 
     });
     console::log_1(&format!("\n").into());
+    serde_wasm_bindgen::to_value(&messages).unwrap()
 }
 
 #[wasm_bindgen]

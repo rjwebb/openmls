@@ -50,12 +50,12 @@ impl Identity {
     }
 
     /// Create an additional key package using the credential_with_key/signer bound to this identity
-    pub fn add_key_package(
-        &mut self,
+    pub fn create_key_package(
+        &self,
         ciphersuite: Ciphersuite,
         crypto: &OpenMlsRustCrypto,
     ) -> KeyPackage {
-        let key_package = KeyPackage::builder()
+        KeyPackage::builder()
             .build(
                 CryptoConfig {
                     ciphersuite,
@@ -65,17 +65,7 @@ impl Identity {
                 &self.signer,
                 self.credential_with_key.clone(),
             )
-            .unwrap();
-
-        self.kp.insert(
-            key_package
-                .hash_ref(crypto.crypto())
-                .unwrap()
-                .as_slice()
-                .to_vec(),
-            key_package.clone(),
-        );
-        key_package
+            .unwrap()
     }
 
     /// Get the plain identity as byte vector.

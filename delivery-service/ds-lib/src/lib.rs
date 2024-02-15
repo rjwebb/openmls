@@ -12,6 +12,7 @@ use tls_codec::{
     TlsByteSliceU16, TlsByteVecU16, TlsByteVecU32, TlsByteVecU8, TlsDeserialize, TlsSerialize,
     TlsSize, TlsVecU32,
 };
+use serde::{Serialize, Deserialize};
 
 /// Information about a client.
 /// To register a new client create a new `ClientInfo` and send it to
@@ -31,7 +32,7 @@ pub struct ClientInfo {
 /// This is a tuple struct holding a vector of `(Vec<u8>, KeyPackage)` tuples,
 /// where the first value is the key package hash (output of `KeyPackage::hash`)
 /// and the second value is the corresponding key package.
-#[derive(Debug, Default, Clone, PartialEq, TlsSerialize, TlsDeserialize, TlsSize)]
+#[derive(Debug, Default, Clone, PartialEq, TlsSerialize, TlsDeserialize, TlsSize, Serialize, Deserialize)]
 pub struct ClientKeyPackages(pub TlsVecU32<(TlsByteVecU8, KeyPackageIn)>);
 
 impl ClientInfo {

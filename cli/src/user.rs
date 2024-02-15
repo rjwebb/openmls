@@ -9,8 +9,6 @@ use openmls_traits::OpenMlsCryptoProvider;
 use tls_codec::TlsByteVecU8;
 use serde::{Serialize, Deserialize};
 
-use wasm_bindgen::prelude::*;
-
 use super::{backend::Backend, conversation::Conversation, identity::Identity};
 
 const CIPHERSUITE: Ciphersuite = Ciphersuite::MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519;
@@ -21,15 +19,14 @@ pub struct Contact {
     id: Vec<u8>,
     // We store multiple here but always only use the first one right now.
     #[allow(dead_code)]
-    #[serde(skip)]
     public_keys: ClientKeyPackages,
 }
 
 #[derive(Serialize,Deserialize)]
 pub struct Group {
-    group_name: String,
-    conversation: Conversation,
-    mls_group: RefCell<MlsGroup>,
+    pub group_name: String,
+    pub conversation: Conversation,
+    pub mls_group: RefCell<MlsGroup>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -66,18 +63,11 @@ impl User {
     }
 
     /// Add a key package to the user identity and return the pair [key package hash ref , key package]
-    pub fn add_key_package(&self) -> (Vec<u8>, KeyPackage) {
-        let kp = self
+    pub fn create_key_package(&self) -> KeyPackage {
+        self
             .identity
-            .borrow_mut()
-            .add_key_package(CIPHERSUITE, &self.crypto);
-        (
-            kp.hash_ref(self.crypto.crypto())
-                .unwrap()
-                .as_slice()
-                .to_vec(),
-            kp,
-        )
+            .borrow()
+            .create_key_package(CIPHERSUITE, &self.crypto)
     }
 
     /// Get a member
@@ -152,23 +142,6 @@ impl User {
             || Err("Unknown group".to_string()),
             |g| Ok(g.conversation.get(100).map(|messages| messages.to_vec())),
         )
-    }
-
-    /// Create a new key package and publish it to the delivery server
-    pub async fn create_kp(&self) {
-        let kp = self.add_key_package();
-        let ckp = ClientKeyPackages(
-            vec![kp]
-                .into_iter()
-                .map(|(b, kp)| (b.into(), KeyPackageIn::from(kp)))
-                .collect::<Vec<(TlsByteVecU8, KeyPackageIn)>>()
-                .into(),
-        );
-
-        match self.backend.publish_key_packages(self, &ckp).await {
-            Ok(()) => (),
-            Err(e) => println!("Error sending new key package: {e:?}"),
-        };
     }
 
     /// Send an application message to the group.

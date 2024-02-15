@@ -20,7 +20,7 @@ fn handle_jsvalue_error<T>(res: Result<T, JsValue>) -> Result<T, String> {
 pub async fn post(url: &Url, msg: &impl Serialize) -> Result<Vec<u8>, String> {
     let mut opts = RequestInit::new();
     opts.method("POST");
-    opts.mode(RequestMode::Cors);
+    opts.mode(RequestMode::NoCors);
 
     let msg_vec = msg.tls_serialize_detached().unwrap();
     // let jv = JsValue::from(msg.tls_serialize_detached().unwrap());
@@ -58,7 +58,7 @@ pub async fn post(url: &Url, msg: &impl Serialize) -> Result<Vec<u8>, String> {
 pub async fn get(url: &Url) -> Result<Vec<u8>, String> {
     let mut opts = RequestInit::new();
     opts.method("GET");
-    opts.mode(RequestMode::Cors);
+    opts.mode(RequestMode::NoCors);
 
     let request;
     match Request::new_with_str_and_init(url.as_str(), &opts) {
