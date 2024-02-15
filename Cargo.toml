@@ -4,7 +4,7 @@ members = [
     "traits",
     "openmls_rust_crypto",
     "fuzz",
-    "cli",
+    "web",
     "interop_client",
     "memory_keystore",
     "delivery-service/ds",
